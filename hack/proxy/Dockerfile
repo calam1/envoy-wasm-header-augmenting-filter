@@ -1,4 +1,5 @@
-FROM istio/proxyv2:1.5.8
+FROM istio/proxyv2:1.7.8
+#FROM istio/proxyv2:1.5.8
 ENTRYPOINT /usr/local/bin/envoy \
     -c /etc/envoy.yaml \
     -l debug \ 

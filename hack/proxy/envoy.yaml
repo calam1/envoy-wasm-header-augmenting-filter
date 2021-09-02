@@ -7,8 +7,10 @@ static_resources:
         port_value: 80
     filter_chains:
     - filters:
-      - name: envoy.http_connection_manager
-        config:
+      #- name: envoy.http_connection_manager
+      - name: envoy.filters.network.http_connection_manager
+        typed_config:
+          "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
           stat_prefix: egress_http
           codec_type: auto
           route_config:
@@ -16,7 +18,7 @@ static_resources:
             virtual_hosts:
             - name: destination_workload
               domains:
-              - "*"
+              - ["*"]
               routes:
               - match:
                   prefix: "/"
@@ -24,15 +26,18 @@ static_resources:
                   cluster: destination_workload
           http_filters:
           - name: envoy.filters.http.wasm
-            config:
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.filters.http.wasm.v3.Wasm
               config:
                 name: "header_augmenting_filter"
-                configuration: |
-                  {
-                    "header_providing_service_cluster": "sidecar",
-                    "header_providing_service_authority": "sidecar",
-                    "header_cache_expiry": "10s"
-                  }
+                configuration:
+                  "@type": "type.googleapis.com/google.protobuf.StringValue"
+                  value: |
+                    {
+                      "header_providing_service_cluster": "sidecar",
+                      "header_providing_service_authority": "sidecar",
+                      "header_cache_expiry": "10s"
+                    }
                 root_id: "header_augmenting_filter"
                 vm_config:
                   runtime: "envoy.wasm.runtime.v8"
