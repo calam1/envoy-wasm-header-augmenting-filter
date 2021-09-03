@@ -46,7 +46,11 @@ thread_local! {
 
 #[no_mangle]
 pub fn _start() {
+    // set log level in start
     proxy_wasm::set_log_level(LogLevel::Trace);
+
+    // root context - singleton
+    // load a default FilterConfig in start
     proxy_wasm::set_root_context(|context_id| -> Box<dyn RootContext> {
         CONFIGS.with(|configs| {
             configs
@@ -54,8 +58,11 @@ pub fn _start() {
                 .insert(context_id, FilterConfig::default());
         });
 
+        // Box is a smart pointer to a heap allocated value of type T
         Box::new(RootHandler { context_id })
     });
+
+    // called during http filter chain
     proxy_wasm::set_http_context(|_context_id, _root_context_id| -> Box<dyn HttpContext> {
         Box::new(HttpHandler {})
     })
@@ -65,6 +72,8 @@ struct RootHandler {
     context_id: u32,
 }
 
+// remember this is a singleton and there is a hook for loading any configuration
+// the tick is a poll action
 impl RootContext for RootHandler {
     fn on_configure(&mut self, _config_size: usize) -> bool {
         // Check for the mandatory filter configuration stanza.
@@ -95,6 +104,7 @@ impl RootContext for RootHandler {
         self.set_shared_data(CACHE_KEY, None, None).is_ok()
     }
 
+    // on_tick do the following actions every `tick_period`
     fn on_tick(&mut self) {
         // Log the action that is about to be taken.
         match self.get_shared_data(CACHE_KEY) {
@@ -102,6 +112,7 @@ impl RootContext for RootHandler {
             (Some(_), _) => debug!("refreshing cached headers"),
         }
 
+        // this gets called every `tick_period` and then dispatches an http call
         CONFIGS.with(|configs| {
             configs.borrow().get(&self.context_id).map(|config| {
                 // We could be in the initialisation tick here so update our
@@ -110,7 +121,10 @@ impl RootContext for RootHandler {
                 self.set_tick_period(config.header_cache_expiry);
 
                 // Dispatch an async HTTP call to the configured cluster.
+                // remember this is an async HTTP call
+                // this is a trait of Context, RootContext extends it
                 self.dispatch_http_call(
+                    // this is what is getting the Authorization
                     &config.header_providing_service_cluster,
                     vec![
                         (":method", "GET"),
